@@ -6,7 +6,7 @@
 #include <websocketpp/config/asio_client.hpp>
 #include <websocketpp/client.hpp>
 
-#include <websocketpp/message_buffer/fixed.hpp>
+//#include <websocketpp/message_buffer/fixed.hpp>
 
 template <typename config_base, typename con_base>
 struct wsperf_config : public config_base {
