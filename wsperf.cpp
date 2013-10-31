@@ -44,6 +44,7 @@ public:
         m_endpoint.set_tcp_pre_init_handler(bind(&type::on_tcp_pre_init,this,::_1));
         m_endpoint.set_tcp_post_init_handler(bind(&type::on_tcp_post_init,this,::_1));
         m_endpoint.set_open_handler(bind(&type::on_open,this,::_1));
+        m_endpoint.set_fail_handler(bind(&type::on_fail,this,::_1));
         m_endpoint.set_close_handler(bind(&type::on_close,this,::_1));
     }
 
