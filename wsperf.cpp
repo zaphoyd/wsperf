@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <chrono>
+#include <mutex>
 
 struct open_handshake_stats {
     std::chrono::high_resolution_clock::time_point s_start;
@@ -46,13 +47,21 @@ public:
         m_endpoint.set_close_handler(bind(&type::on_close,this,::_1));
     }
 
-    void start(std::string uri) {
+    void start(std::string uri, size_t num_threads, size_t num_cons) {
         // TODO: how many connections to start with?
 
-        launch_connection(uri);
+        m_connection_count = num_cons;
+        for (int i = 0; i < num_cons; i++) {
+            launch_connection(uri);
+        }
 
-
-        m_endpoint.run();
+        std::vector<std::thread> ts;
+        for (int i = 0; i < num_threads; i++) {
+            ts.push_back(std::thread(&client_type::run, &m_endpoint));
+        }
+        for (auto & t : ts) {
+            t.join();
+        }
     }
 
 
@@ -96,49 +105,71 @@ public:
         con->s_fail = false;
         con->close(websocketpp::close::status::going_away,"");
     }
-    
+
     void on_fail(websocketpp::connection_hdl hdl) {
         connection_ptr con = m_endpoint.get_con_from_hdl(hdl);
         con->s_open = std::chrono::high_resolution_clock::now();
         con->s_fail = true;
+
+        std::lock_guard<std::mutex> guard(m_stats_lock);
+        m_stats_list.push_back(*websocketpp::lib::static_pointer_cast<open_handshake_stats>(con));
+        if (m_stats_list.size() == m_connection_count) {
+            test_complete();
+        }
     }
-    
+
     void on_close(websocketpp::connection_hdl hdl) {
         connection_ptr con = m_endpoint.get_con_from_hdl(hdl);
         con->s_close = std::chrono::high_resolution_clock::now();
 
-        // TODO: get lock
+        std::lock_guard<std::mutex> guard(m_stats_lock);
         m_stats_list.push_back(*websocketpp::lib::static_pointer_cast<open_handshake_stats>(con));
-        test_complete();
+        if (m_stats_list.size() == m_connection_count) {
+            test_complete();
+        }
     }
 
     void test_complete() {
         std::cout << "[";
+        bool first = true;
         for (auto i : m_stats_list) {
-            std::cout << "{\"tcp_pre_init\":" 
-                      << std::chrono::duration_cast<dur_type>(i.s_tcp_pre_init-i.s_start).count() 
-            std::cout << ",\"tcp_post_init\":" 
-                      << std::chrono::duration_cast<dur_type>(i.s_tcp_post_init-i.s_tcp_pre_init).count() 
-            std::cout << ",\"open\":" 
-                      << std::chrono::duration_cast<dur_type>(i.s_open-i.s_tcp_post_init).count() 
-            std::cout << ",\"close\":" 
-                      << std::chrono::duration_cast<dur_type>(i.s_close-i.s_open).count() 
+            std::cout << (!first ? "," : "") << "{\"tcp_pre_init\":"
+                      << std::chrono::duration_cast<dur_type>(i.s_tcp_pre_init-i.s_start).count()
+                      << ",\"tcp_post_init\":"
+                      << std::chrono::duration_cast<dur_type>(i.s_tcp_post_init-i.s_tcp_pre_init).count()
+                      << ",\"open\":"
+                      << std::chrono::duration_cast<dur_type>(i.s_open-i.s_tcp_post_init).count()
+                      << ",\"close\":"
+                      << std::chrono::duration_cast<dur_type>(i.s_close-i.s_open).count()
+                      << ",\"failed\":" << (i.s_fail ? "true" : "false")
                       << "}";
+            first = false;
         }
-        std::cout << "]";
+        std::cout << "]" << std::endl;
     }
 private:
     client_type m_endpoint;
 
+    size_t m_connection_count;
+
+    std::mutex m_stats_lock;
     std::vector<open_handshake_stats> m_stats_list;
 };
 
 
 int main(int argc, char* argv[]) {
-	std::string uri = "wss://echo.websocket.org";
+	std::string uri;
+    size_t num_threads;
+    size_t num_cons;
 
-	if (argc == 2) {
+	if (argc == 4) {
 	    uri = argv[1];
+	    num_threads = atoi(argv[2]);
+	    num_cons = atoi(argv[3]);
+	} else {
+	    std::cout << "Usage: wsperf serverurl num_threads num_connections" << std::endl;
+	    std::cout << "Example: wsperf ws://localhost:9002 4 50" << std::endl;
+	    return 1;
 	}
 
 	try {
@@ -148,7 +179,7 @@ int main(int argc, char* argv[]) {
             std::cout << "wss not supported at the moment" << std::endl;
         } else {
             handshake_test<client<open_handshake_stats>> endpoint;
-            endpoint.start(uri);
+            endpoint.start(uri,num_threads,num_cons);
         }
     } catch (const std::exception & e) {
         std::cout << e.what() << std::endl;

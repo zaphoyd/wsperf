@@ -16,13 +16,15 @@ struct wsperf_config : public config_base {
     typedef typename core::concurrency_type concurrency_type;
     typedef typename core::request_type request_type;
     typedef typename core::response_type response_type;
-    //typedef core::message_type message_type;
-    //typedef core::con_msg_manager_type con_msg_manager_type;
-    //typedef core::endpoint_msg_manager_type endpoint_msg_manager_type;
-    typedef websocketpp::message_buffer::fixed::policy::message message_type;
-    typedef websocketpp::message_buffer::fixed::policy::con_msg_manager con_msg_manager_type;
+
+    typedef typename core::message_type message_type;
+    typedef typename core::con_msg_manager_type con_msg_manager_type;
+    typedef typename core::endpoint_msg_manager_type endpoint_msg_manager_type;
+    //typedef websocketpp::message_buffer::fixed::policy::message message_type;
+    //typedef websocketpp::message_buffer::fixed::policy::con_msg_manager con_msg_manager_type;
     //typedef websocketpp::message_buffer::fixed::policy::con_msg_manager endpoint_msg_manager_type;
-    typedef websocketpp::message_buffer::fixed::policy::endpoint_msg_manager endpoint_msg_manager_type;
+    //typedef websocketpp::message_buffer::fixed::policy::endpoint_msg_manager endpoint_msg_manager_type;
+
     typedef typename core::alog_type alog_type;
     typedef typename core::elog_type elog_type;
     typedef typename core::rng_type rng_type;
