@@ -48,14 +48,17 @@ public:
         m_endpoint.set_close_handler(bind(&type::on_close,this,::_1));
     }
 
-    void start(std::string uri, size_t num_threads, size_t num_cons) {
+    void start(std::string uri, size_t num_threads, size_t num_cons, size_t num_parallel_handshakes) {
         // TODO: how many connections to start with?
 
         m_stats_list.reserve(num_cons);
+        m_uri = uri;
         m_connection_count = num_cons;
-        for (int i = 0; i < num_cons; i++) {
-            launch_connection(uri);
-        }
+        m_max_handshakes = num_parallel_handshakes;
+        m_cur_handshakes = 0;
+        m_total_connections = 0;
+
+        launch_more_connections();
 
         std::vector<std::thread> ts;
         for (int i = 0; i < num_threads; i++) {
@@ -66,6 +69,13 @@ public:
         }
     }
 
+    void launch_more_connections() {
+        while (m_cur_handshakes < m_max_handshakes && m_total_connections < m_connection_count) {
+            launch_connection(m_uri);
+            m_cur_handshakes++;
+            m_total_connections++;
+        }
+    }
 
     void launch_connection(std::string uri) {
         websocketpp::lib::error_code ec;
@@ -106,6 +116,10 @@ public:
         con->s_open = std::chrono::high_resolution_clock::now();
         con->s_fail = false;
         con->close(websocketpp::close::status::going_away,"");
+
+        std::lock_guard<std::mutex> guard(m_stats_lock);
+        m_cur_handshakes--;
+        launch_more_connections();
     }
 
     void on_fail(websocketpp::connection_hdl hdl) {
@@ -119,6 +133,9 @@ public:
         if (m_stats_list.size() == m_connection_count) {
             test_complete();
         }
+
+        m_cur_handshakes--;
+        launch_more_connections();
     }
 
     void on_close(websocketpp::connection_hdl hdl) {
@@ -153,7 +170,11 @@ public:
 private:
     client_type m_endpoint;
 
+    std::string m_uri;
     size_t m_connection_count;
+    size_t m_max_handshakes;
+    size_t m_cur_handshakes;
+    size_t m_total_connections;
 
     std::mutex m_stats_lock;
     std::vector<open_handshake_stats> m_stats_list;
@@ -165,14 +186,16 @@ int main(int argc, char* argv[]) {
 	std::string uri;
     size_t num_threads;
     size_t num_cons;
+    size_t max_parallel_handshakes = 10;
 
-	if (argc == 4) {
+	if (argc == 5) {
 	    uri = argv[1];
 	    num_threads = atoi(argv[2]);
 	    num_cons = atoi(argv[3]);
+	    max_parallel_handshakes = atoi(argv[4]);
 	} else {
-	    std::cout << "Usage: wsperf serverurl num_threads num_connections" << std::endl;
-	    std::cout << "Example: wsperf ws://localhost:9002 4 50" << std::endl;
+	    std::cout << "Usage: wsperf serverurl num_threads num_connections max_parallel_handshakes" << std::endl;
+	    std::cout << "Example: wsperf ws://localhost:9002 4 50 25" << std::endl;
 	    return 1;
 	}
 
@@ -183,7 +206,7 @@ int main(int argc, char* argv[]) {
             std::cout << "wss not supported at the moment" << std::endl;
         } else {
             handshake_test<client_tls> endpoint;
-            endpoint.start(uri,num_threads,num_cons);
+            endpoint.start(uri,num_threads,num_cons,max_parallel_handshakes);
         }
     } catch (const std::exception & e) {
         std::cout << e.what() << std::endl;
