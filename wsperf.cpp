@@ -37,7 +37,7 @@ public:
 
         // Register our handlers
         if (m_endpoint.is_secure()) {
-            m_endpoint.set_tls_init_handler(bind(&type::on_tls_init,this,::_1));
+            //m_endpoint.set_tls_init_handler(bind(&type::on_tls_init,this,::_1));
         }
 
         m_endpoint.set_tcp_pre_init_handler(bind(&type::on_tcp_pre_init,this,::_1));
@@ -108,12 +108,24 @@ public:
         con->s_close = std::chrono::high_resolution_clock::now();
 
         // TODO: get lock
-        m_stats_list.push_back(websocketpp::lib::static_pointer_cast<open_handshake_stats>(con));
+        m_stats_list.push_back(*websocketpp::lib::static_pointer_cast<open_handshake_stats>(con));
         test_complete();
     }
 
     void test_complete() {
-        std::cout << "completed " << m_stats_list.size() << std::endl;
+        std::cout << "[";
+        for (auto i : m_stats_list) {
+            std::cout << "{\"tcp_pre_init\":" 
+                      << std::chrono::duration_cast<dur_type>(i.s_tcp_pre_init-i.s_start).count() 
+            std::cout << ",\"tcp_post_init\":" 
+                      << std::chrono::duration_cast<dur_type>(i.s_tcp_post_init-i.s_tcp_pre_init).count() 
+            std::cout << ",\"open\":" 
+                      << std::chrono::duration_cast<dur_type>(i.s_open-i.s_tcp_post_init).count() 
+            std::cout << ",\"close\":" 
+                      << std::chrono::duration_cast<dur_type>(i.s_close-i.s_open).count() 
+                      << "}";
+        }
+        std::cout << "]";
     }
 private:
     client_type m_endpoint;
@@ -131,8 +143,9 @@ int main(int argc, char* argv[]) {
 
 	try {
         if (uri.substr(0,3) == "wss") {
-            handshake_test<client_tls<open_handshake_stats>> endpoint;
-            endpoint.start(uri);
+            //handshake_test<client_tls<open_handshake_stats>> endpoint;
+            //endpoint.start(uri);
+            std::cout << "wss not supported at the moment" << std::endl;
         } else {
             handshake_test<client<open_handshake_stats>> endpoint;
             endpoint.start(uri);
