@@ -17,7 +17,7 @@ struct open_handshake_stats {
     std::chrono::high_resolution_clock::time_point s_close;
 
     // some sort of status
-    bool s_fail = false;
+    bool s_fail;
 };
 
 template <typename client_type>
