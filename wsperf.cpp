@@ -156,6 +156,7 @@ private:
     std::vector<open_handshake_stats> m_stats_list;
 };
 
+typedef websocketpp::client<wsperf_config<websocketpp::config::asio_tls_client, open_handshake_stats>> client_tls;
 
 int main(int argc, char* argv[]) {
 	std::string uri;
@@ -178,7 +179,7 @@ int main(int argc, char* argv[]) {
             //endpoint.start(uri);
             std::cout << "wss not supported at the moment" << std::endl;
         } else {
-            handshake_test<client<open_handshake_stats>> endpoint;
+            handshake_test<client_tls> endpoint;
             endpoint.start(uri,num_threads,num_cons);
         }
     } catch (const std::exception & e) {

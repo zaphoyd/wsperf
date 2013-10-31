@@ -6,7 +6,7 @@
 #include <websocketpp/config/asio_client.hpp>
 #include <websocketpp/client.hpp>
 
-#include <websocketpp/message_buffer/fixed.hpp>
+//#include <websocketpp/message_buffer/fixed.hpp>
 
 template <typename config_base, typename con_base>
 struct wsperf_config : public config_base {
@@ -53,13 +53,13 @@ struct wsperf_config : public config_base {
         websocketpp::log::alevel::none;
 };
 
-template <typename connection_base>
+/*template <typename connection_base>
 using client = websocketpp::client
     <wsperf_config<websocketpp::config::asio_client, connection_base>>;
 
 template <typename connection_base>
 using client_tls = websocketpp::client
-    <wsperf_config<websocketpp::config::asio_tls_client, connection_base>>;
+    <wsperf_config<websocketpp::config::asio_tls_client, connection_base>>;*/
 
 // convenience typedefs
 using websocketpp::lib::placeholders::_1;
