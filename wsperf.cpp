@@ -50,6 +50,7 @@ public:
     void start(std::string uri, size_t num_threads, size_t num_cons) {
         // TODO: how many connections to start with?
 
+        m_stats_list.reserve(num_cons);
         m_connection_count = num_cons;
         for (int i = 0; i < num_cons; i++) {
             launch_connection(uri);
