@@ -8,12 +8,27 @@
 #include <iostream>
 #include <chrono>
 
-class perftest {
+struct open_handshake_stats {
+    std::chrono::high_resolution_clock::time_point s_start;
+    std::chrono::high_resolution_clock::time_point s_tcp_pre_init;
+    std::chrono::high_resolution_clock::time_point s_tcp_post_init;
+    std::chrono::high_resolution_clock::time_point s_open;
+    std::chrono::high_resolution_clock::time_point s_close;
+
+    // some sort of status
+    bool s_fail = false;
+};
+
+template <typename client_type>
+class handshake_test {
 public:
-    typedef perftest type;
+    typedef handshake_test<client_type> type;
     typedef std::chrono::duration<int,std::micro> dur_type;
 
-    perftest () {
+    typedef typename client_type::connection_ptr connection_ptr;
+
+    handshake_test () {
+        // silence access/error messages
         m_endpoint.set_access_channels(websocketpp::log::alevel::none);
         m_endpoint.set_error_channels(websocketpp::log::elevel::none);
 
@@ -21,41 +36,45 @@ public:
         m_endpoint.init_asio();
 
         // Register our handlers
-        m_endpoint.set_tls_init_handler(bind(&type::on_tls_init,this,::_1));
+        if (m_endpoint.is_secure()) {
+            m_endpoint.set_tls_init_handler(bind(&type::on_tls_init,this,::_1));
+        }
 
         m_endpoint.set_tcp_pre_init_handler(bind(&type::on_tcp_pre_init,this,::_1));
         m_endpoint.set_tcp_post_init_handler(bind(&type::on_tcp_post_init,this,::_1));
-        m_endpoint.set_socket_init_handler(bind(&type::on_socket_init,this,::_1));
-        m_endpoint.set_message_handler(bind(&type::on_message,this,::_1,::_2));
         m_endpoint.set_open_handler(bind(&type::on_open,this,::_1));
         m_endpoint.set_close_handler(bind(&type::on_close,this,::_1));
     }
 
     void start(std::string uri) {
+        // TODO: how many connections to start with?
+
+        launch_connection(uri);
+
+
+        m_endpoint.run();
+    }
+
+
+    void launch_connection(std::string uri) {
         websocketpp::lib::error_code ec;
-        client::connection_ptr con = m_endpoint.get_connection(uri, ec);
+        connection_ptr con = m_endpoint.get_connection(uri, ec);
 
         if (ec) {
         	m_endpoint.get_alog().write(websocketpp::log::alevel::app,ec.message());
         }
 
-        //con->set_proxy("http://humupdates.uchicago.edu:8443");
-
         m_endpoint.connect(con);
-
-	    // Start the ASIO io_service run loop
-	    m_start = std::chrono::high_resolution_clock::now();
-        m_endpoint.run();
+	    con->s_start = std::chrono::high_resolution_clock::now();
     }
 
     void on_tcp_pre_init(websocketpp::connection_hdl hdl) {
-        m_tcp_pre_init = std::chrono::high_resolution_clock::now();
+        connection_ptr con = m_endpoint.get_con_from_hdl(hdl);
+        con->s_tcp_pre_init = std::chrono::high_resolution_clock::now();
     }
     void on_tcp_post_init(websocketpp::connection_hdl hdl) {
-        m_tcp_post_init = std::chrono::high_resolution_clock::now();
-    }
-    void on_socket_init(websocketpp::connection_hdl hdl) {
-        m_socket_init = std::chrono::high_resolution_clock::now();
+        connection_ptr con = m_endpoint.get_con_from_hdl(hdl);
+        con->s_tcp_post_init = std::chrono::high_resolution_clock::now();
     }
 
     context_ptr on_tls_init(websocketpp::connection_hdl hdl) {
@@ -72,64 +91,36 @@ public:
     }
 
     void on_open(websocketpp::connection_hdl hdl) {
-        m_open = std::chrono::high_resolution_clock::now();
-
-        client::connection_ptr con = m_endpoint.get_con_from_hdl(hdl);
-
-        m_msg = con->get_message(websocketpp::frame::opcode::text,64);
-        m_msg->append_payload(std::string(60,'*'));
-        m_msg_count = 1;
-
-        //m_message_stamps.reserve(1000);
-
-        m_con_start = std::chrono::high_resolution_clock::now();
-
-        m_endpoint.send(hdl, m_msg);
-        //m_endpoint.send(hdl, "", websocketpp::frame::opcode::text);
+        connection_ptr con = m_endpoint.get_con_from_hdl(hdl);
+        con->s_open = std::chrono::high_resolution_clock::now();
+        con->s_fail = false;
+        con->close(websocketpp::close::status::going_away,"");
     }
-    void on_message(websocketpp::connection_hdl hdl, message_ptr msg) {
-        if (m_msg_count == 1000) {
-            m_message = std::chrono::high_resolution_clock::now();
-            m_endpoint.close(hdl,websocketpp::close::status::going_away,"");
-        } else {
-            m_msg_count++;
-            m_endpoint.send(hdl, m_msg);
-        }
+    
+    void on_fail(websocketpp::connection_hdl hdl) {
+        connection_ptr con = m_endpoint.get_con_from_hdl(hdl);
+        con->s_open = std::chrono::high_resolution_clock::now();
+        con->s_fail = true;
     }
+    
     void on_close(websocketpp::connection_hdl hdl) {
-        m_close = std::chrono::high_resolution_clock::now();
+        connection_ptr con = m_endpoint.get_con_from_hdl(hdl);
+        con->s_close = std::chrono::high_resolution_clock::now();
 
+        // TODO: get lock
+        m_stats_list.push_back(websocketpp::lib::static_pointer_cast<open_handshake_stats>(con));
+        test_complete();
+    }
 
-
-        std::cout << "Socket Init: " << std::chrono::duration_cast<dur_type>(m_socket_init-m_start).count() << std::endl;
-        std::cout << "TCP Pre Init: " << std::chrono::duration_cast<dur_type>(m_tcp_pre_init-m_start).count() << std::endl;
-        std::cout << "TCP Post Init: " << std::chrono::duration_cast<dur_type>(m_tcp_post_init-m_start).count() << std::endl;
-        std::cout << "Open: " << std::chrono::duration_cast<dur_type>(m_open-m_start).count() << std::endl;
-        std::cout << "Start: " << std::chrono::duration_cast<dur_type>(m_con_start-m_start).count() << std::endl;
-        std::cout << "Message: " << std::chrono::duration_cast<dur_type>(m_message-m_start).count() << std::endl;
-        std::cout << "Close: " << std::chrono::duration_cast<dur_type>(m_close-m_start).count() << std::endl;
-        std::cout << std::endl;
-        std::cout << "Message: " << std::chrono::duration_cast<dur_type>(m_message-m_con_start).count() << std::endl;
-        std::cout << "Close: " << std::chrono::duration_cast<dur_type>(m_close-m_message).count() << std::endl;
+    void test_complete() {
+        std::cout << "completed " << m_stats_list.size() << std::endl;
     }
 private:
-    client m_endpoint;
+    client_type m_endpoint;
 
-    client::message_ptr m_msg;
-    size_t m_msg_count;
-
-    open_handshake_stats stats;
+    std::vector<open_handshake_stats> m_stats_list;
 };
 
-struct open_handshake_stats {
-    std::chrono::high_resolution_clock::time_point m_start;
-    std::chrono::high_resolution_clock::time_point m_tcp_pre_init;
-    std::chrono::high_resolution_clock::time_point m_tcp_post_init;
-    std::chrono::high_resolution_clock::time_point m_open;
-
-    // some sort of status
-    bool fail = false;
-}
 
 int main(int argc, char* argv[]) {
 	std::string uri = "wss://echo.websocket.org";
@@ -139,8 +130,13 @@ int main(int argc, char* argv[]) {
 	}
 
 	try {
-        perftest endpoint;
-        endpoint.start(uri);
+        if (uri.substr(0,3) == "wss") {
+            handshake_test<client_tls<open_handshake_stats>> endpoint;
+            endpoint.start(uri);
+        } else {
+            handshake_test<client<open_handshake_stats>> endpoint;
+            endpoint.start(uri);
+        }
     } catch (const std::exception & e) {
         std::cout << e.what() << std::endl;
     } catch (websocketpp::lib::error_code e) {
