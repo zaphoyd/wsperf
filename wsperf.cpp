@@ -110,6 +110,7 @@ public:
     void on_fail(websocketpp::connection_hdl hdl) {
         connection_ptr con = m_endpoint.get_con_from_hdl(hdl);
         con->s_open = std::chrono::high_resolution_clock::now();
+        con->s_close = con->s_open;
         con->s_fail = true;
 
         std::lock_guard<std::mutex> guard(m_stats_lock);
