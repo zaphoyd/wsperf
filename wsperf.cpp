@@ -156,7 +156,7 @@ private:
     std::vector<open_handshake_stats> m_stats_list;
 };
 
-typedef websocketpp::client<wsperf_config<websocketpp::config::asio_tls_client, open_handshake_stats>> client_tls;
+typedef websocketpp::client<wsperf_config<websocketpp::config::asio_client, open_handshake_stats>> client_tls;
 
 int main(int argc, char* argv[]) {
 	std::string uri;
