@@ -48,13 +48,14 @@ public:
         m_endpoint.set_close_handler(bind(&type::on_close,this,::_1));
     }
 
-    void start(std::string uri, size_t num_threads, size_t num_cons, size_t num_parallel_handshakes) {
+    void start(std::string uri, size_t num_threads, size_t num_cons, size_t num_parallel_handshakes_low, size_t num_parallel_handshakes_high) {
         // TODO: how many connections to start with?
 
         m_stats_list.reserve(num_cons);
         m_uri = uri;
         m_connection_count = num_cons;
-        m_max_handshakes = num_parallel_handshakes;
+        m_max_handshakes_low = num_parallel_handshakes_low;
+        m_max_handshakes_high = num_parallel_handshakes_high;
         m_cur_handshakes = 0;
         m_total_connections = 0;
 
@@ -70,7 +71,7 @@ public:
     }
 
     void launch_more_connections() {
-        while (m_cur_handshakes < m_max_handshakes && m_total_connections < m_connection_count) {
+        while (m_cur_handshakes < m_max_handshakes_high && m_total_connections < m_connection_count) {
             launch_connection(m_uri);
             m_cur_handshakes++;
             m_total_connections++;
@@ -119,7 +120,9 @@ public:
 
         std::lock_guard<std::mutex> guard(m_stats_lock);
         m_cur_handshakes--;
-        launch_more_connections();
+        if (m_cur_handshakes < m_max_handshakes_low) {
+            launch_more_connections();
+        }
     }
 
     void on_fail(websocketpp::connection_hdl hdl) {
@@ -135,7 +138,9 @@ public:
         }
 
         m_cur_handshakes--;
-        launch_more_connections();
+        if (m_cur_handshakes < m_max_handshakes_low) {
+            launch_more_connections();
+        }
     }
 
     void on_close(websocketpp::connection_hdl hdl) {
@@ -172,7 +177,8 @@ private:
 
     std::string m_uri;
     size_t m_connection_count;
-    size_t m_max_handshakes;
+    size_t m_max_handshakes_high;
+    size_t m_max_handshakes_low;
     size_t m_cur_handshakes;
     size_t m_total_connections;
 
@@ -186,16 +192,20 @@ int main(int argc, char* argv[]) {
 	std::string uri;
     size_t num_threads;
     size_t num_cons;
-    size_t max_parallel_handshakes = 10;
+    size_t max_parallel_handshakes_low;
+    size_t max_parallel_handshakes_high;
 
-	if (argc == 5) {
+	if (argc == 6) {
 	    uri = argv[1];
 	    num_threads = atoi(argv[2]);
 	    num_cons = atoi(argv[3]);
-	    max_parallel_handshakes = atoi(argv[4]);
+	    max_parallel_handshakes_low = atoi(argv[4]);
+	    max_parallel_handshakes_high = atoi(argv[5]);
 	} else {
-	    std::cout << "Usage: wsperf serverurl num_threads num_connections max_parallel_handshakes" << std::endl;
-	    std::cout << "Example: wsperf ws://localhost:9002 4 50 25" << std::endl;
+	    std::cout << "Usage: wsperf serverurl num_threads num_connections max_parallel_handshakes_low max_parallel_handshakes_high" << std::endl;
+	    std::cout << "Example: wsperf ws://localhost:9002 4 50 25 50" << std::endl;
+	    return 1;
+	}
 	    return 1;
 	}
 
@@ -206,7 +216,7 @@ int main(int argc, char* argv[]) {
             std::cout << "wss not supported at the moment" << std::endl;
         } else {
             handshake_test<client_tls> endpoint;
-            endpoint.start(uri,num_threads,num_cons,max_parallel_handshakes);
+            endpoint.start(uri,num_threads,num_cons,max_parallel_handshakes_low,max_parallel_handshakes_high);
         }
     } catch (const std::exception & e) {
         std::cout << e.what() << std::endl;
