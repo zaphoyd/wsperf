@@ -75,16 +75,15 @@ Analyze results:
 
 Start the server:
 
-	oberstet@corei7-ubuntu:~/scm/websocketpp$ ./build/release/testee_server/testee_server
+	oberstet@corei7-ubuntu:~/scm/websocketpp$ ./build/release/testee_server/testee_server 9002 4
 
 Start the test:
 
 	oberstet@corei7-ubuntu:~/scm/wsperf$ time ./wsperf ws://127.0.0.1:9002 4 64000 2000 > results.json
 
-	real	0m5.455s
-	user	0m11.448s
-	sys	0m7.636s
-
+	real	0m5.284s
+	user	0m11.496s
+	sys	0m7.508s
 
 Analyze results:
 
@@ -92,15 +91,15 @@ Analyze results:
 
 	wsperf results - WebSocket Opening Handshake
 
-	Success:     63871
-	   Fail:       129
+	Success:     64000
+	   Fail:         0
 
-	    Min:    0.2 ms
-	     SD: 90063.1 ms
-	    Avg: 4060.1 ms
+	    Min:    3.1 ms
+	     SD:   17.7 ms
+	    Avg:   13.3 ms
 	 Median:   13.1 ms
-	  q90.0:   15.6 ms
-	  q95.0:   17.0 ms
-	  q99.0:   26.4 ms
-	  q99.9: 2008071.8 ms
-	    Max: 2008072.8 ms
+	  q90.0:   15.4 ms
+	  q95.0:   16.7 ms
+	  q99.0:   26.9 ms
+	  q99.9:  314.5 ms
+	    Max:  354.7 ms
