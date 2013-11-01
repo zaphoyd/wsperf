@@ -59,6 +59,8 @@ public:
         m_cur_handshakes = 0;
         m_total_connections = 0;
 
+        m_test_start = std::chrono::high_resolution_clock::now();
+
         launch_more_connections();
 
         std::vector<std::thread> ts;
@@ -155,7 +157,11 @@ public:
     }
 
     void test_complete() {
-        std::cout << "[";
+        m_test_end = std::chrono::high_resolution_clock::now();
+
+        std::cout << "{\"total_duration:\":"
+                  << std::chrono::duration_cast<dur_type>(m_test_end-m_test_start).count()
+                  << ",\"connection_stats\":[";
         bool first = true;
         for (auto i : m_stats_list) {
             std::cout << (!first ? "," : "") << "{\"tcp_pre_init\":"
@@ -170,7 +176,7 @@ public:
                       << "}";
             first = false;
         }
-        std::cout << "]" << std::endl;
+        std::cout << "]}" << std::endl;
     }
 private:
     client_type m_endpoint;
@@ -181,6 +187,9 @@ private:
     size_t m_max_handshakes_low;
     size_t m_cur_handshakes;
     size_t m_total_connections;
+
+    std::chrono::high_resolution_clock::time_point m_test_start;
+    std::chrono::high_resolution_clock::time_point m_test_end;
 
     std::mutex m_stats_lock;
     std::vector<open_handshake_stats> m_stats_list;
