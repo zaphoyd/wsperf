@@ -61,7 +61,7 @@ public:
         launch_more_connections();
 
         std::vector<std::thread> ts;
-        for (int i = 0; i < num_threads; i++) {
+        for (size_t i = 0; i < num_threads; i++) {
             ts.push_back(std::thread(&client_type::run, &m_endpoint));
         }
         for (auto & t : ts) {
