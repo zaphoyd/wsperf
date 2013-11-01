@@ -58,16 +58,18 @@ def pstat(data):
    r_q95 = float(r[-len(r)/20])
    r_q99 = float(r[-len(r)/100])
    r_q999 = float(r[-len(r)/1000])
+   r_q9999 = float(r[-len(r)/10000])
    r_max = float(r[-1])
 
    print ("     Min: %9.1f ms\n" + \
           "      SD: %9.1f ms\n" + \
           "     Avg: %9.1f ms\n" + \
           "  Median: %9.1f ms\n" + \
-          "   q90.0: %9.1f ms\n" + \
-          "   q95.0: %9.1f ms\n" + \
-          "   q99.0: %9.1f ms\n" + \
-          "   q99.9: %9.1f ms\n" + \
+          "  q90   : %9.1f ms\n" + \
+          "  q95   : %9.1f ms\n" + \
+          "  q99   : %9.1f ms\n" + \
+          "  q99.9 : %9.1f ms\n" + \
+          "  q99.99: %9.1f ms\n" + \
           "     Max: %9.1f ms\n") % (r_min / 1000.,
                                      r_sd / 1000.,
                                      r_avg / 1000.,
@@ -76,6 +78,7 @@ def pstat(data):
                                      r_q95 / 1000.,
                                      r_q99 / 1000.,
                                      r_q999 / 1000.,
+                                     r_q9999 / 1000.,
                                      r_max / 1000.)
 
 res['total'] = res['success'] + res['fail']
