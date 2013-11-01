@@ -159,7 +159,7 @@ public:
     void test_complete() {
         m_test_end = std::chrono::high_resolution_clock::now();
 
-        std::cout << "{\"total_duration:\":"
+        std::cout << "{\"total_duration\":"
                   << std::chrono::duration_cast<dur_type>(m_test_end-m_test_start).count()
                   << ",\"connection_stats\":[";
         bool first = true;
