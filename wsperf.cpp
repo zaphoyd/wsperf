@@ -206,6 +206,14 @@ int main(int argc, char* argv[]) {
 	    std::cout << "Example: wsperf ws://localhost:9002 4 50 25 50" << std::endl;
 	    return 1;
 	}
+
+	// some input sanity checking
+	if (num_threads == 0) {
+	    std::cout << "Num threads must be positive" << std::endl;
+	    return 1;
+	}
+	if (max_parallel_handshakes_low > 0 && max_parallel_handshakes_low < max_parallel_handshakes_high) {
+	    std::cout << "max_parallel_handshakes_low must be positive and less than max_parallel_handshakes_high" << std::endl;
 	    return 1;
 	}
 
