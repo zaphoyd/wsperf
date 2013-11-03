@@ -59,6 +59,9 @@ public:
         m_close_immediately = true;
         m_cur_connections = 0;
 
+        m_low_water_mark_count = 0;
+        m_high_water_mark_count = 0;
+
         m_test_start = std::chrono::high_resolution_clock::now();
 
         launch_more_connections();
@@ -77,7 +80,14 @@ public:
     }
 
     void launch_more_connections() {
-        while (m_cur_handshakes < m_max_handshakes_high && m_total_connections < m_connection_count) {
+        if (m_total_connections < m_connection_count) {
+            m_low_water_mark_count++;
+        }
+        while (m_total_connections < m_connection_count) {
+            if (m_cur_handshakes == m_max_handshakes_high) {
+                m_high_water_mark_count++;
+                break;
+            }
             launch_connection(m_uri);
             m_cur_handshakes++;
             m_total_connections++;
@@ -188,6 +198,8 @@ public:
 
         std::cout << "{\"total_duration\":"
                   << std::chrono::duration_cast<dur_type>(m_test_end-m_test_start).count()
+                  << ",\"handshake_throttle_count\":" << m_high_water_mark_count
+                  << ",\"handshake_resume_count\":" << m_low_water_mark_count
                   << ",\"connection_stats\":[";
         bool first = true;
         for (auto i : m_stats_list) {
@@ -215,6 +227,9 @@ private:
     size_t m_cur_handshakes;
     size_t m_cur_connections;
     size_t m_total_connections;
+
+    size_t m_high_water_mark_count;
+    size_t m_low_water_mark_count;
 
     bool m_close_immediately;
 
