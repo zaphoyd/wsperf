@@ -13,20 +13,36 @@ res = {'success': 0, 'fail': 0}
 res_open_timestamps = []
 res_close_timestamps = []
 
+tcp_pre_init_min = None
+tcp_pre_init_max = None
+total_duration = None
+
 parser = ijson.parse(open('results.json'))
 for prefix, event, value in parser:
    n += 1
-   if prefix == 'item.failed':
-      if value:
-         res['fail'] += 1
-      else:
-         res['success'] += 1
+   #print prefix, event, value
+   #if n > 10:
+   #   sys.exit(0)
+   if True:
+      if prefix == 'total_duration':
+         total_duration = value
+      if prefix == 'connection_stats.item.tcp_pre_init':
+         if tcp_pre_init_min is None or value < tcp_pre_init_min:
+            tcp_pre_init_min = value
+         if tcp_pre_init_max is None or value > tcp_pre_init_max:
+            tcp_pre_init_max = value
 
-   if prefix == 'item.open':
-      res_open_timestamps.append(value)
+      if prefix == 'connection_stats.item.failed':
+         if value:
+            res['fail'] += 1
+         else:
+            res['success'] += 1
 
-   if prefix == 'item.close':
-      res_close_timestamps.append(value)
+      if prefix == 'connection_stats.item.open':
+         res_open_timestamps.append(value)
+
+      if prefix == 'connection_stats.item.close':
+         res_close_timestamps.append(value)
 
 
 def pstat(data):
@@ -42,31 +58,40 @@ def pstat(data):
    r_q95 = float(r[-len(r)/20])
    r_q99 = float(r[-len(r)/100])
    r_q999 = float(r[-len(r)/1000])
+   r_q9999 = float(r[-len(r)/10000])
    r_max = float(r[-1])
 
-   print ("    Min: %6.1f ms\n" + \
-          "     SD: %6.1f ms\n" + \
-          "    Avg: %6.1f ms\n" + \
-          " Median: %6.1f ms\n" + \
-          "  q90.0: %6.1f ms\n" + \
-          "  q95.0: %6.1f ms\n" + \
-          "  q99.0: %6.1f ms\n" + \
-          "  q99.9: %6.1f ms\n" + \
-          "    Max: %6.1f ms\n") % (r_min / 1000.,
-                                    r_sd / 1000.,
-                                    r_avg / 1000.,
-                                    r_median / 1000.,
-                                    r_q90 / 1000.,
-                                    r_q95 / 1000.,
-                                    r_q99 / 1000.,
-                                    r_q999 / 1000.,
-                                    r_max / 1000.)
+   print ("     Min: %9.1f ms\n" + \
+          "      SD: %9.1f ms\n" + \
+          "     Avg: %9.1f ms\n" + \
+          "  Median: %9.1f ms\n" + \
+          "  q90   : %9.1f ms\n" + \
+          "  q95   : %9.1f ms\n" + \
+          "  q99   : %9.1f ms\n" + \
+          "  q99.9 : %9.1f ms\n" + \
+          "  q99.99: %9.1f ms\n" + \
+          "     Max: %9.1f ms\n") % (r_min / 1000.,
+                                     r_sd / 1000.,
+                                     r_avg / 1000.,
+                                     r_median / 1000.,
+                                     r_q90 / 1000.,
+                                     r_q95 / 1000.,
+                                     r_q99 / 1000.,
+                                     r_q999 / 1000.,
+                                     r_q9999 / 1000.,
+                                     r_max / 1000.)
+
+res['total'] = res['success'] + res['fail']
 
 print
 print "wsperf results - WebSocket Opening Handshake"
 print
-print "Success: %9d" % res['success']
-print "   Fail: %9d" % res['fail']
+print "          Duration: %9d ms" % (float(total_duration) / 1000.)
+print "             Total: %9d" % res['total']
+print "           Success: %9d" % res['success']
+print "              Fail: %9d" % res['fail']
+print "            Fail %%: %9.2f" % (100. * float(res['fail']) / float(res['total']))
+print "    Handshakes/sec: %9d" % int(round((float(res['success']) / (float(total_duration) / 1000000.))))
 print
 pstat(res_open_timestamps)
 print
