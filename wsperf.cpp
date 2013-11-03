@@ -49,8 +49,6 @@ public:
     }
 
     void start(std::string uri, size_t num_threads, size_t num_cons, size_t num_parallel_handshakes_low, size_t num_parallel_handshakes_high) {
-        // TODO: how many connections to start with?
-
         m_stats_list.reserve(num_cons);
         m_uri = uri;
         m_connection_count = num_cons;
@@ -58,6 +56,8 @@ public:
         m_max_handshakes_high = num_parallel_handshakes_high;
         m_cur_handshakes = 0;
         m_total_connections = 0;
+        m_close_immediately = true;
+        m_cur_connections = 0;
 
         m_test_start = std::chrono::high_resolution_clock::now();
 
@@ -122,12 +122,23 @@ public:
         connection_ptr con = m_endpoint.get_con_from_hdl(hdl);
         con->s_open = std::chrono::high_resolution_clock::now();
         con->s_fail = false;
-        con->close(websocketpp::close::status::going_away,"");
+
+        if (m_close_immediately) {
+            con->close(websocketpp::close::status::going_away,"");
+        }
 
         std::lock_guard<std::mutex> guard(m_stats_lock);
         m_cur_handshakes--;
+        m_cur_connections++;
+
+        // check if we need to launch more connections
         if (m_cur_handshakes < m_max_handshakes_low) {
             launch_more_connections();
+        }
+
+        // check if we need to close any connections
+        if (m_total_connections == m_connection_count) {
+            // close connections
         }
     }
 
@@ -138,15 +149,22 @@ public:
         con->s_fail = true;
 
         std::lock_guard<std::mutex> guard(m_stats_lock);
+        m_cur_handshakes--;
+
+        // Add stats to the list
         m_stats_list.push_back(*websocketpp::lib::static_pointer_cast<open_handshake_stats>(con));
+
+        // check if we need to launch more connections
+        if (m_cur_handshakes < m_max_handshakes_low) {
+            launch_more_connections();
+        }
+
+        // check if we are done
         if (m_stats_list.size() == m_connection_count) {
             test_complete();
         }
 
-        m_cur_handshakes--;
-        if (m_cur_handshakes < m_max_handshakes_low) {
-            launch_more_connections();
-        }
+
     }
 
     void on_close(websocketpp::connection_hdl hdl) {
@@ -154,7 +172,12 @@ public:
         con->s_close = std::chrono::high_resolution_clock::now();
 
         std::lock_guard<std::mutex> guard(m_stats_lock);
+        m_cur_connections--;
+
+        // Add stats to the list
         m_stats_list.push_back(*websocketpp::lib::static_pointer_cast<open_handshake_stats>(con));
+
+        // Check it we are done
         if (m_stats_list.size() == m_connection_count) {
             test_complete();
         }
@@ -190,7 +213,10 @@ private:
     size_t m_max_handshakes_high;
     size_t m_max_handshakes_low;
     size_t m_cur_handshakes;
+    size_t m_cur_connections;
     size_t m_total_connections;
+
+    bool m_close_immediately;
 
     std::chrono::high_resolution_clock::time_point m_test_start;
     std::chrono::high_resolution_clock::time_point m_test_end;
