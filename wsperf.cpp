@@ -63,12 +63,16 @@ public:
 
         launch_more_connections();
 
-        std::vector<std::thread> ts;
-        for (size_t i = 0; i < num_threads; i++) {
-            ts.push_back(std::thread(&client_type::run, &m_endpoint));
-        }
-        for (auto & t : ts) {
-            t.join();
+        if (num_threads > 0) {
+            std::vector<std::thread> ts;
+            for (size_t i = 0; i < num_threads; i++) {
+                ts.push_back(std::thread(&client_type::run, &m_endpoint));
+            }
+            for (auto & t : ts) {
+                t.join();
+            }
+        } else {
+            m_endpoint.run();
         }
     }
 
@@ -217,8 +221,8 @@ int main(int argc, char* argv[]) {
 	}
 
 	// some input sanity checking
-	if (num_threads == 0) {
-	    std::cout << "Num threads must be positive" << std::endl;
+	if (num_threads < 0) {
+	    std::cout << "Num threads must be non-negative" << std::endl;
 	    return 1;
 	}
 	if (max_parallel_handshakes_low == 0 || max_parallel_handshakes_low > max_parallel_handshakes_high) {
