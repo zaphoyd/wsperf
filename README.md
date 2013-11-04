@@ -1,9 +1,9 @@
 # wsperf
 
-**wsperf** is a WebSocket load testing probe that can be used for load testing and performance benchmarking of WebSocket server:
+**wsperf** is a WebSocket load testing probe that can be used for load testing and performance benchmarking of WebSocket servers:
 
  * comes as a command line tool that builds on [WebSocket++](http://www.zaphoyd.com/websocketpp), a high-performance C++/ASIO based WebSocket library.
- * designed to work stand-alone or being controlled from **wstest**, which comes as part of the [Autobahn WebSocket testsuite](https://github.com/tavendo/AutobahnTestSuite).
+ * designed to work stand-alone or being controlled from **wstest**, which comes as part of the [Autobahn WebSocket testsuite](http://autobahn.ws/testsuite/).
 
 ## Description
 
@@ -84,7 +84,7 @@ WebSocket++ is a header-only library. So all you need is:
 
 ### SCons
 
-**wsperf** is build using [SCons](http://scons.org/), a Python based build tool.
+**wsperf** is built using [SCons](http://scons.org/), a Python based build tool.
 
 So if you have Python installed, all you need is:
 
@@ -109,6 +109,8 @@ Now get the source and build
 	cd wsperf
 	scons
 
+When successful, this should produce a `wsperf` executable (optimized, statically linked and unstripped).
+
 To cleanup
 
 	scons -uc
@@ -117,8 +119,7 @@ To cleanup
 
 Basic usage of **wsperf**:
 
-	wsperf <wsuri> <threads> <connections> \
-               <low_watermark> <high_watermark> <result_file>
+	wsperf <wsuri> <threads> <connections> <low_watermark> <high_watermark> <result_file>
 
 like e.g.
 
@@ -131,15 +132,18 @@ The `threads` parameter controls the number of background worker threads to be s
 > It can also be `0` in which case the load is processed on the main thread. Note that ASIO will nevertheless create a background thread of asynchronous name resolution. So you see 2 threads for **wsperf** even if run with `threads==0`.
 > 
 
-The `connections` is the total number of WebSocket connections that are opened to the testee - not concurrently, but in total.
+The `connections` is the total number of WebSocket connections that are opened to the testee - not concurrently, but in total. Also note that **wsperf** will currently not retry a failing connection.
 
 The `result_file` is the name of the log file to produce.
 
 The `low_watermark` and `high_watermark` control how many parallel connections will be in flight as follows:
 
-**wsperf** will open new TCP connections to the testee and perform WebSocket opening handshakes on those as fast as it can up till the `high_watermark` connections is reached.
+**wsperf** will open new TCP connections to the testee and perform WebSocket opening handshakes on those as fast as it can up till the `high_watermark` connections is reached. That is connections which have not yet again been closed.
 
-When that happens, it will stop trying to connect more. if then even 1 of the formerly outstanding connections reaches WS "connected" (opening HS complete), it'll start 1 new. so when max is reached, it'll be a very quick, fine grained toggle between stop and resume connecting.
-[31.10.2013 22:35:37] Tobias Oberstein: so max_parallel_handshakes limits the number of WS connections that haven't yet reached the "open" state .. hence are still in flight.
-[31.10.2013 22:36:19] Peter Thorson: yes
-[31.10.2013 22:36:21] Peter Thorson: exactly
+When that happens, it will stop trying to connect more. After some time, more WebSocket connections will get closed again (by performing a closing handshakes), and the outstanding number reaches the `low_watermark`, **wsperf** will start again connecting as fast as it can.
+
+So the watermarks limit the number of WebSocket connections that haven't yet reached the "open" state .. hence are still in flight.
+
+## Postprocessing
+
+Writeme.
