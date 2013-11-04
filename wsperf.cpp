@@ -6,6 +6,7 @@
 #include "wspp-config.hpp"
 
 #include <iostream>
+#include <fstream>
 #include <chrono>
 #include <mutex>
 
@@ -48,9 +49,10 @@ public:
         m_endpoint.set_close_handler(bind(&type::on_close,this,::_1));
     }
 
-    void start(std::string uri, size_t num_threads, size_t num_cons, size_t num_parallel_handshakes_low, size_t num_parallel_handshakes_high) {
+    void start(std::string uri, size_t num_threads, size_t num_cons, size_t num_parallel_handshakes_low, size_t num_parallel_handshakes_high, std::string logfile) {
         m_stats_list.reserve(num_cons);
         m_uri = uri;
+        m_logfile = logfile;
         m_connection_count = num_cons;
         m_max_handshakes_low = num_parallel_handshakes_low;
         m_max_handshakes_high = num_parallel_handshakes_high;
@@ -63,6 +65,7 @@ public:
         m_high_water_mark_count = 0;
 
         m_test_start = std::chrono::high_resolution_clock::now();
+        m_test_start_wallclock = std::chrono::system_clock::now();
 
         launch_more_connections();
 
@@ -195,32 +198,41 @@ public:
 
     void test_complete() {
         m_test_end = std::chrono::high_resolution_clock::now();
+        m_test_end_wallclock = std::chrono::system_clock::now();
 
-        std::cout << "{\"total_duration\":"
-                  << std::chrono::duration_cast<dur_type>(m_test_end-m_test_start).count()
-                  << ",\"handshake_throttle_count\":" << m_high_water_mark_count
-                  << ",\"handshake_resume_count\":" << m_low_water_mark_count
-                  << ",\"connection_stats\":[";
+        std::ofstream logfile;
+        logfile.open(m_logfile);
+
+        logfile << "{\"total_duration\":"
+                << std::chrono::duration_cast<dur_type>(m_test_end-m_test_start).count()
+                << ",\"started\":" << m_test_start_wallclock.time_since_epoch().count()
+                << ",\"ended\":" << m_test_end_wallclock.time_since_epoch().count()
+                << ",\"handshake_throttle_count\":" << m_high_water_mark_count
+                << ",\"handshake_resume_count\":" << m_low_water_mark_count
+                << ",\"connection_stats\":[";
         bool first = true;
         for (auto i : m_stats_list) {
-            std::cout << (!first ? "," : "") << "{\"tcp_pre_init\":"
-                      << std::chrono::duration_cast<dur_type>(i.s_tcp_pre_init-i.s_start).count()
-                      << ",\"tcp_post_init\":"
-                      << std::chrono::duration_cast<dur_type>(i.s_tcp_post_init-i.s_tcp_pre_init).count()
-                      << ",\"open\":"
-                      << std::chrono::duration_cast<dur_type>(i.s_open-i.s_tcp_post_init).count()
-                      << ",\"close\":"
-                      << std::chrono::duration_cast<dur_type>(i.s_close-i.s_open).count()
-                      << ",\"failed\":" << (i.s_fail ? "true" : "false")
-                      << "}";
+            logfile << (!first ? "," : "") << "{\"tcp_pre_init\":"
+                    << std::chrono::duration_cast<dur_type>(i.s_tcp_pre_init-i.s_start).count()
+                    << ",\"tcp_post_init\":"
+                    << std::chrono::duration_cast<dur_type>(i.s_tcp_post_init-i.s_tcp_pre_init).count()
+                    << ",\"open\":"
+                    << std::chrono::duration_cast<dur_type>(i.s_open-i.s_tcp_post_init).count()
+                    << ",\"close\":"
+                    << std::chrono::duration_cast<dur_type>(i.s_close-i.s_open).count()
+                    << ",\"failed\":" << (i.s_fail ? "true" : "false")
+                    << "}";
             first = false;
         }
-        std::cout << "]}" << std::endl;
+        logfile << "]}" << std::endl;
+
+        logfile.close();
     }
 private:
     client_type m_endpoint;
 
     std::string m_uri;
+    std::string m_logfile;
     size_t m_connection_count;
     size_t m_max_handshakes_high;
     size_t m_max_handshakes_low;
@@ -236,6 +248,9 @@ private:
     std::chrono::high_resolution_clock::time_point m_test_start;
     std::chrono::high_resolution_clock::time_point m_test_end;
 
+    std::chrono::system_clock::time_point m_test_start_wallclock;
+    std::chrono::system_clock::time_point m_test_end_wallclock;
+
     std::mutex m_stats_lock;
     std::vector<open_handshake_stats> m_stats_list;
 };
@@ -243,21 +258,23 @@ private:
 typedef websocketpp::client<wsperf_config<websocketpp::config::asio_client, open_handshake_stats>> client_tls;
 
 int main(int argc, char* argv[]) {
+    std::string logfile;
 	std::string uri;
     size_t num_threads;
     size_t num_cons;
     size_t max_parallel_handshakes_low;
     size_t max_parallel_handshakes_high;
 
-	if (argc == 6) {
+	if (argc == 7) {
 	    uri = argv[1];
 	    num_threads = atoi(argv[2]);
 	    num_cons = atoi(argv[3]);
 	    max_parallel_handshakes_low = atoi(argv[4]);
 	    max_parallel_handshakes_high = atoi(argv[5]);
+        logfile = argv[6];
 	} else {
 	    std::cout << "Usage: wsperf serverurl num_threads num_connections max_parallel_handshakes_low max_parallel_handshakes_high" << std::endl;
-	    std::cout << "Example: wsperf ws://localhost:9002 4 50 25 50" << std::endl;
+	    std::cout << "Example: wsperf ws://localhost:9002 4 50 25 50 result.json" << std::endl;
 	    return 1;
 	}
 
@@ -274,7 +291,7 @@ int main(int argc, char* argv[]) {
             std::cout << "wss not supported at the moment" << std::endl;
         } else {
             handshake_test<client_tls> endpoint;
-            endpoint.start(uri,num_threads,num_cons,max_parallel_handshakes_low,max_parallel_handshakes_high);
+            endpoint.start(uri,num_threads,num_cons,max_parallel_handshakes_low,max_parallel_handshakes_high,logfile);
         }
     } catch (const std::exception & e) {
         std::cout << e.what() << std::endl;

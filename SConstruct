@@ -3,18 +3,16 @@ env = Environment(ENV = os.environ)
 
 # figure out a better way to configure this
 if os.environ.has_key('CXX'):
-    env['CXX'] = os.environ['CXX']
+   env['CXX'] = os.environ['CXX']
 
 if os.environ.has_key('DEBUG'):
-    env['DEBUG'] = os.environ['DEBUG']
+   env['DEBUG'] = os.environ['DEBUG']
 
 if os.environ.has_key('CXXFLAGS'):
-    #env['CXXFLAGS'] = os.environ['CXXFLAGS']
-    env.Append(CXXFLAGS = os.environ['CXXFLAGS'])
+   env.Append(CXXFLAGS = os.environ['CXXFLAGS'])
 
 if os.environ.has_key('LINKFLAGS'):
-    #env['LDFLAGS'] = os.environ['LDFLAGS']
-    env.Append(LINKFLAGS = os.environ['LINKFLAGS'])
+   env.Append(LINKFLAGS = os.environ['LINKFLAGS'])
 
 
 ## WebSocket++
@@ -82,7 +80,8 @@ elif env['PLATFORM'] == 'posix':
       env.Append(CCFLAGS = ['-g', '-O0'])
    else:
       env.Append(CPPDEFINES = ['NDEBUG'])
-      env.Append(CCFLAGS = ['-O3', '-fomit-frame-pointer'])
+      env.Append(CCFLAGS = ['-O3'])
+      #env.Append(CCFLAGS = ['-O3', '-fomit-frame-pointer'])
    env.Append(CCFLAGS = ['-Wall'])
    #env['LINKFLAGS'] = ''
 elif env['PLATFORM'] == 'darwin':
@@ -90,7 +89,8 @@ elif env['PLATFORM'] == 'darwin':
       env.Append(CCFLAGS = ['-g', '-O0'])
    else:
       env.Append(CPPDEFINES = ['NDEBUG'])
-      env.Append(CCFLAGS = ['-O3', '-fomit-frame-pointer'])
+      env.Append(CCFLAGS = ['-O3'])
+      #env.Append(CCFLAGS = ['-O3', '-fomit-frame-pointer'])
    env.Append(CCFLAGS = ['-Wall'])
    #env['LINKFLAGS'] = ''
 
@@ -190,6 +190,11 @@ env_cpp11.Append(CPPPATH = [os.environ['WSPP_ROOT']])
 env = env.Clone ()
 env_cpp11 = env_cpp11.Clone ()
 
+## strip executable (this remove symbol tables - but we may want it even for
+## non-debug builds for Linux "perf")
+##
+STRIP = False
+
 # if a C++11 environment is available build using that, otherwise use boost
 if env_cpp11.has_key('WSPP_CPP11_ENABLED'):
 
@@ -202,5 +207,5 @@ else:
    wsperf = env.Program('wsperf', ["wsperf.cpp"], LIBS = ALL_LIBS)
 
 
-if not env.has_key('DEBUG'):
+if not env.has_key('DEBUG') and STRIP:
    env.AddPostAction (wsperf, env.Action('strip ' + str(wsperf[0])))
