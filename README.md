@@ -118,6 +118,46 @@ Run the test (from another shell .. make sure to run that test multiple times wi
 
 	Analyze done.
 
+### Netty
+
+Run the testee:
+
+	cd ~/scm/netty
+	mvn install
+	java -cp ./all/target/netty-all-4.0.12.Final-SNAPSHOT.jar:./example/target/netty-example-4.0.12.Final-SNAPSHOT.jar io.netty.example.http.websocketx.autobahn.AutobahnServer 9999
+
+Run the test (from another shell .. make sure to run that test multiple times without restarting the testee to give the HotSpot JIT compiler chance to warmup on the hotpaths):
+
+	$ cd ~/scm/wsperf
+	$ make test_netty
+	pypy wsperf.py --wsuri ws://127.0.0.1:9999 --workers 4 --threads 0 --conns 50000 --lowmark 250 --highmark 500
+	Loading wsperf result file result_0.json ..
+	Loading wsperf result file result_1.json ..
+	Loading wsperf result file result_2.json ..
+	Loading wsperf result file result_3.json ..
+	 
+	Aggregate results (WebSocket Opening+Closing Handshake)
+	 
+	Duration: 12.2 s
+	Total: 200000
+	Success: 200000
+	Fail: 0
+	Fail %: 0.00
+	Handshakes/sec: 16397
+	 
+	Min: 2.4 ms
+	SD: 34.7 ms
+	Avg: 29.3 ms
+	Median: 25.2 ms
+	q90 : 33.4 ms
+	q95 : 36.9 ms
+	q99 : 194.0 ms
+	q99.9 : 420.2 ms
+	q99.99: 466.5 ms
+	Max: 477.3 ms
+ 
+ 
+Analyze done.
 
 ### Linux Perf
 
