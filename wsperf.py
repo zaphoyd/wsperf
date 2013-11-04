@@ -41,8 +41,18 @@ if __name__ == '__main__':
    else:
       df = []
       for i in range(options.workers):
-         args = [options.wsuri, str(options.threads), str(options.conns), str(options.lowmark), str(options.highmark), options.resultfile % i]
+
+         args = [options.wsuri,
+                 str(options.threads),
+                 str(options.conns),
+                 str(options.lowmark),
+                 str(options.highmark),
+                 options.resultfile % i]
+
+         ## run wsperf executable
          d = getProcessOutput(options.wsperf, args, os.environ)
+
+         ## accumulate any output
          df.append(d)
 
       d = DeferredList(df, consumeErrors = True)

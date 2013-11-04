@@ -36,41 +36,88 @@ Analyzing results can be done with `analyze.py` (a quick hack, needs more love).
 
 ## Results
 
-### Autobahn Multicore
+### WebSocket++
 
-Make sure to run **wsperf** against the testee multiple times to allow testee that use a JITting compiler (suche as Autobahn on PyPy) to warm up.
+Build and run the testee:
 
-Starting a test run:
+	$ cd ~/scm/websocketpp
+	$ scons
+	$./build/release/testee_server/testee_server 9002 4
 
-	oberstet@corei7-ubuntu:~/scm/wsperf$ time ./wsperf ws://127.0.0.1:9000 8 200000 1000 2000 > results.json
+Run the test (from another shell):
 
-	real	0m15.341s
-	user	0m35.104s
-	sys	0m20.528s
+	$ cd ~/scm/wsperf
+	$ make test_ws
+	pypy wsperf.py --wsuri ws://127.0.0.1:9002 --workers 4 --threads 0 --conns 50000 --lowmark 250 --highmark 500
+	Loading wsperf result file result_0.json ..
+	Loading wsperf result file result_1.json ..
+	Loading wsperf result file result_2.json ..
+	Loading wsperf result file result_3.json ..
 
-Analyzing results:
+	Aggregate results (WebSocket Opening+Closing Handshake)
 
-	oberstet@corei7-ubuntu:~/scm/wsperf$ ~/pypy-2.1/bin/pypy analyze.py 
-
-	wsperf results - WebSocket Opening Handshake
-
-	          Duration:     14583 ms
+	          Duration:      13.5 s
 	             Total:    200000
 	           Success:    200000
 	              Fail:         0
 	            Fail %:      0.00
-	    Handshakes/sec:     13714
+	    Handshakes/sec:     14796
 
-	     Min:       1.2 ms
-	      SD:      19.9 ms
-	     Avg:      24.8 ms
-	  Median:      18.1 ms
-	  q90   :      43.2 ms
-	  q95   :      71.7 ms
-	  q99   :     101.9 ms
-	  q99.9 :     117.3 ms
-	  q99.99:     124.0 ms
-	     Max:     131.7 ms
+	     Min:       7.6 ms
+	      SD:      11.2 ms
+	     Avg:      68.4 ms
+	  Median:      68.2 ms
+	  q90   :      82.8 ms
+	  q95   :      87.6 ms
+	  q99   :      96.5 ms
+	  q99.9 :     106.4 ms
+	  q99.99:     108.6 ms
+	     Max:     109.2 ms
+
+
+	Analyze done.
+
+
+### Autobahn Multicore
+
+Run the testee:
+
+	$ cd ~/scm/AutobahnPython/examples/websocket/echo_multicore
+	$ pypy server.py --wsuri ws://localhost:9000 --workers 4 --silence
+
+Run the test (from another shell .. make sure to run that test multiple times without restarting the testee to give the PyPy JIT compiler chance to warmup on the hotpaths):
+
+	$ cd ~/scm/wsperf
+	$ make test_ab
+	pypy wsperf.py --wsuri ws://127.0.0.1:9000 --workers 4 --threads 0 --conns 50000 --lowmark 250 --highmark 500
+	Loading wsperf result file result_0.json ..
+	Loading wsperf result file result_1.json ..
+	Loading wsperf result file result_2.json ..
+	Loading wsperf result file result_3.json ..
+
+	Aggregate results (WebSocket Opening+Closing Handshake)
+
+	          Duration:      11.7 s
+	             Total:    200000
+	           Success:    200000
+	              Fail:         0
+	            Fail %:      0.00
+	    Handshakes/sec:     17058
+
+	     Min:       1.0 ms
+	      SD:      16.9 ms
+	     Avg:      31.6 ms
+	  Median:      27.6 ms
+	  q90   :      52.2 ms
+	  q95   :      65.9 ms
+	  q99   :      95.8 ms
+	  q99.9 :     115.2 ms
+	  q99.99:     124.7 ms
+	     Max:     138.0 ms
+
+
+	Analyze done.
+
 
 ### Linux Perf
 
