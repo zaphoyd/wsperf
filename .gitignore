@@ -3,3 +3,4 @@ wsperf
 *.o
 *.json
 perf*
+*.py[co]

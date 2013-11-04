@@ -139,9 +139,7 @@ def analyze(res):
    print
 
 
-if __name__ == '__main__':
-   files = [('result_%d.json' % i) for i in range(4)]
-
+def printResults(files):
    results = []
    for fn in files:
       print "Loading wsperf result file %s .." % fn
@@ -150,6 +148,11 @@ if __name__ == '__main__':
 
    res = joinResults(results)
    analyze(res)
+   print "Analyze done."
+
+
+if __name__ == '__main__':
+   printResults(sys.argv[1:])
 
 
 #pstat(res_close_timestamps)
