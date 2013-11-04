@@ -2,3 +2,4 @@ wsperf
 .sconsign.dblite
 *.o
 *.json
+perf*
