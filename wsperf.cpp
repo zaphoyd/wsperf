@@ -65,6 +65,7 @@ public:
         m_high_water_mark_count = 0;
 
         m_test_start = std::chrono::high_resolution_clock::now();
+        m_test_start_wallclock = std::chrono::system_clock::now();
 
         launch_more_connections();
 
@@ -197,11 +198,15 @@ public:
 
     void test_complete() {
         m_test_end = std::chrono::high_resolution_clock::now();
+        m_test_end_wallclock = std::chrono::system_clock::now();
+
         std::ofstream logfile;
         logfile.open(m_logfile);
 
         logfile << "{\"total_duration\":"
                 << std::chrono::duration_cast<dur_type>(m_test_end-m_test_start).count()
+                << ",\"started\":" << m_test_start_wallclock.time_since_epoch().count()
+                << ",\"ended\":" << m_test_end_wallclock.time_since_epoch().count()
                 << ",\"handshake_throttle_count\":" << m_high_water_mark_count
                 << ",\"handshake_resume_count\":" << m_low_water_mark_count
                 << ",\"connection_stats\":[";
@@ -242,6 +247,9 @@ private:
 
     std::chrono::high_resolution_clock::time_point m_test_start;
     std::chrono::high_resolution_clock::time_point m_test_end;
+
+    std::chrono::system_clock::time_point m_test_start_wallclock;
+    std::chrono::system_clock::time_point m_test_end_wallclock;
 
     std::mutex m_stats_lock;
     std::vector<open_handshake_stats> m_stats_list;

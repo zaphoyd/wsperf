@@ -1,22 +1,8 @@
+# wsperf
+
+**wsperf** is a WebSocket load testing probe.
+
 ## Building
-
-Ubuntu 12.04 LTS (manually compiled boost):
-
-	export BOOST_ROOT=$HOME/build/boost_1_55_0b1_gcc
-	export LD_LIBRARY_PATH=$BOOST_ROOT/stage/lib:$LD_LIBRARY_PATH
-
-	g++ -std=c++0x -O3 -D_WEBSOCKETPP_CPP11_STL_ -I../websocketpp/ -I$BOOST_ROOT wsperf.cpp -L$BOOST_ROOT/stage/lib -lssl -lcrypto -lboost_system -lpthread -o wsperf
-
-
-Ubuntu 12.04 LTS (package manager boost 1.48: libboost-system1.48-dev):
-Ubuntu 13.10 (package manager boost 1.53: libboost-all-dev):
-
-    g++ -std=c++0x -O3 -D_WEBSOCKETPP_CPP11_STL_ -I../websocketpp/ wsperf.cpp -lssl -lcrypto -lboost_system -lpthread -o wsperf
-
-Mac OS X 10.9 / XCode, clang
-
-    clang++ -std=c++0x -stdlib=libc++ -I../websocketpp -isystem ../boost_1_53_0_libcpp -O2 ../boost_1_53_0_libcpp/stage/lib/libboost_system.a -D_WEBSOCKETPP_CPP11_STL_ wsperf.cpp -lssl -lcrypto -o wsperf
-
 
 You will need to have 2 environment variables set:
 
@@ -33,9 +19,10 @@ To cleanup
 
 	scons -uc
 
+
 ## Usage
 
-	time ./wsperf ws://127.0.0.1:9000 4 64000 2000 > results.json
+	time ./wsperf ws://127.0.0.1:9000 4 200000 1000 2000 > results.json
 
 
 ## Analyze
@@ -46,79 +33,114 @@ Analyzing results can be done with `analyze.py` (a quick hack, needs more love).
 	cd ijson
 	~/pypy-2.1/bin/easy_install ijson
 
-Make sure to run that baby with PyPy and do multiple runs *without* restarting the server (for server that use JITting compilers to warm up).
 
 ## Results
 
 ### Autobahn Multicore
 
-Start the server:
+Make sure to run **wsperf** against the testee multiple times to allow testee that use a JITting compiler (suche as Autobahn on PyPy) to warm up.
 
-	oberstet@corei7-ubuntu:~/scm/AutobahnPython/examples/websocket/echo_multicore$ ~/pypy-2.1/bin/pypy server.py --wsurws://localhost:9000 --workers 4
+Starting a test run:
 
-Start the test:
+	oberstet@corei7-ubuntu:~/scm/wsperf$ time ./wsperf ws://127.0.0.1:9000 8 200000 1000 2000 > results.json
 
-	oberstet@corei7-ubuntu:~/scm/wsperf$ time ./wsperf ws://127.0.0.1:9000 4 64000 2000 > results.json
+	real	0m15.341s
+	user	0m35.104s
+	sys	0m20.528s
 
-	real	0m5.745s
-	user	0m12.128s
-	sys	0m8.000s
-	oberstet@corei7-ubuntu:~/scm/wsperf$ python
-	Python 2.7.5 (default, Oct 22 2013, 10:12:53)
-	[GCC 4.6.3] on linux2
-	Type "help", "copyright", "credits" or "license" for more information.
-	>>> 64000./5.745
-	11140.12184508268
+Analyzing results:
 
-Analyze results:
-
-	oberstet@corei7-ubuntu:~/scm/wsperf$ ~/pypy-2.1/bin/pypy analyze.py
+	oberstet@corei7-ubuntu:~/scm/wsperf$ ~/pypy-2.1/bin/pypy analyze.py 
 
 	wsperf results - WebSocket Opening Handshake
 
-	Success:     64000
-	   Fail:         0
+	          Duration:     14583 ms
+	             Total:    200000
+	           Success:    200000
+	              Fail:         0
+	            Fail %:      0.00
+	    Handshakes/sec:     13714
 
-	    Min:    2.5 ms
-	     SD:   30.1 ms
-	    Avg:   20.2 ms
-	 Median:   13.8 ms
-	  q90.0:   18.8 ms
-	  q95.0:   83.1 ms
-	  q99.0:  166.4 ms
-	  q99.9:  179.6 ms
-	    Max:  187.8 ms
+	     Min:       1.2 ms
+	      SD:      19.9 ms
+	     Avg:      24.8 ms
+	  Median:      18.1 ms
+	  q90   :      43.2 ms
+	  q95   :      71.7 ms
+	  q99   :     101.9 ms
+	  q99.9 :     117.3 ms
+	  q99.99:     124.0 ms
+	     Max:     131.7 ms
 
-### WebSocket++
+### Linux Perf
 
-Start the server:
+Basic statistics:
 
-	oberstet@corei7-ubuntu:~/scm/websocketpp$ ./build/release/testee_server/testee_server 9002 4
+	oberstet@corei7-ubuntu:~/scm/wsperf$ sudo perf stat ./wsperf ws://127.0.0.1:9000 8 200000 1000 2000 > results.json
 
-Start the test:
+	 Performance counter stats for './wsperf ws://127.0.0.1:9000 8 200000 1000 2000':
 
-	oberstet@corei7-ubuntu:~/scm/wsperf$ time ./wsperf ws://127.0.0.1:9002 4 64000 2000 > results.json
+	      56397,171142 task-clock                #    3,576 CPUs utilized          
+	           177.411 context-switches          #    0,003 M/sec                  
+	            23.577 cpu-migrations            #    0,418 K/sec                  
+	           595.352 page-faults               #    0,011 M/sec                  
+	   186.462.389.466 cycles                    #    3,306 GHz                     [83,25%]
+	   144.686.178.873 stalled-cycles-frontend   #   77,60% frontend cycles idle    [83,57%]
+	    83.129.352.607 stalled-cycles-backend    #   44,58% backend  cycles idle    [66,67%]
+	    84.877.715.262 instructions              #    0,46  insns per cycle        
+	                                             #    1,70  stalled cycles per insn [83,35%]
+	    16.967.531.711 branches                  #  300,858 M/sec                   [83,40%]
+	       673.808.823 branch-misses             #    3,97% of all branches         [83,11%]
 
-	real	0m5.284s
-	user	0m11.496s
-	sys	0m7.508s
+	      15,771390852 seconds time elapsed
 
-Analyze results:
+	oberstet@corei7-ubuntu:~/scm/wsperf$ 
 
-	oberstet@corei7-ubuntu:~/scm/wsperf$ ~/pypy-2.1/bin/pypy analyze.py
 
-	wsperf results - WebSocket Opening Handshake
+Detailed event recording:
 
-	Success:     64000
-	   Fail:         0
+	oberstet@corei7-ubuntu:~/scm/wsperf$ sudo perf record -e cycles,branch-misses,cache-misses ./wsperf ws://127.0.0.1:9000 8 200000 1000 2000 > results.json
+	[ perf record: Woken up 119 times to write data ]
+	[ perf record: Captured and wrote 30.653 MB perf.data (~1339248 samples) ]
 
-	    Min:    3.1 ms
-	     SD:   17.7 ms
-	    Avg:   13.3 ms
-	 Median:   13.1 ms
-	  q90.0:   15.4 ms
-	  q95.0:   16.7 ms
-	  q99.0:   26.9 ms
-	  q99.9:  314.5 ms
-	    Max:  354.7 ms
+Reporting
 
+	oberstet@corei7-ubuntu:~/scm/wsperf$ sudo perf report --stdio
+	# ========
+	# captured on: Mon Nov  4 08:03:59 2013
+	# hostname : corei7-ubuntu
+	# os release : 3.8.0-32-generic
+	# perf version : 3.8.13.10
+	# arch : x86_64
+	# nrcpus online : 8
+	# nrcpus avail : 8
+	# cpudesc : Intel(R) Core(TM) i7 CPU 920 @ 2.67GHz
+	# cpuid : GenuineIntel,6,26,4
+	# total memory : 12296476 kB
+	# cmdline : /usr/bin/perf_3.8.0-32 record -e cycles,branch-misses,cache-misses ./wsperf ws://127.0.0.1:9000 
+	# event : name = cycles, type = 0, config = 0x0, config1 = 0x0, config2 = 0x0, excl_usr = 0, excl_kern = 0, 
+	# event : name = branch-misses, type = 0, config = 0x5, config1 = 0x0, config2 = 0x0, excl_usr = 0, excl_ker
+	# event : name = cache-misses, type = 0, config = 0x3, config1 = 0x0, config2 = 0x0, excl_usr = 0, excl_kern
+	# HEADER_CPU_TOPOLOGY info available, use -I to display
+	# HEADER_NUMA_TOPOLOGY info available, use -I to display
+	# pmu mappings: cpu = 4, software = 1, tracepoint = 2, uncore = 6, breakpoint = 5
+	# ========
+	#
+	# Samples: 249K of event 'cycles'
+	# Event count (approx.): 190156545668
+	#
+	# Overhead  Command        Shared Object                                                                    
+	# ........  .......  ...................  ..................................................................
+	#
+	     4.68%   wsperf  libc-2.15.so         [.] _int_malloc                                                   
+	     3.94%   wsperf  libc-2.15.so         [.] _int_free                                                     
+	     3.20%   wsperf  [kernel.kallsyms]    [k] __ticket_spin_lock                                            
+	     2.91%   wsperf  libc-2.15.so         [.] malloc                                                        
+	     1.86%   wsperf  wsperf               [.] std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_cou
+	     1.84%   wsperf  wsperf               [.] std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_coun
+	     1.61%   wsperf  libpthread-2.15.so   [.] pthread_mutex_lock                                            
+	     1.28%   wsperf  libc-2.15.so         [.] tolower                                                       
+	     1.12%   wsperf  libc-2.15.so         [.] __memcpy_ssse3_back                                           
+	     1.09%   wsperf  libstdc++.so.6.0.16  [.] __cxxabiv1::__vmi_class_type_info::__do_dyncast(long, __cxxabi
+	     1.06%   wsperf  libc-2.15.so         [.] free                                                          
+    ...
