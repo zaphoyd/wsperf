@@ -31,13 +31,16 @@ if os.environ.has_key('BOOSTROOT'):
    os.environ['BOOST_ROOT'] = os.environ['BOOSTROOT']
 
 if os.environ.has_key('BOOST_ROOT'):
-   env['BOOST_INCLUDES'] = os.environ['BOOST_ROOT']
-   env['BOOST_LIBS'] = os.path.join(os.environ['BOOST_ROOT'], 'stage', 'lib')
+   env['BOOST_INCLUDES'] = os.path.join(os.environ['BOOST_ROOT'], 'include')
+   env['BOOST_LIBS'] = os.path.join(os.environ['BOOST_ROOT'], 'lib')
 elif os.environ.has_key('BOOST_INCLUDES') and os.environ.has_key('BOOST_LIBS'):
    env['BOOST_INCLUDES'] = os.environ['BOOST_INCLUDES']
    env['BOOST_LIBS'] = os.environ['BOOST_LIBS']
 else:
    raise SCons.Errors.UserError, "Neither BOOST_ROOT, nor BOOST_INCLUDES + BOOST_LIBS was set!"
+
+env.Append(CPPPATH = [env['BOOST_INCLUDES']])
+env.Append(LIBPATH = [env['BOOST_LIBS']])
 
 if os.environ.has_key('WSPP_ENABLE_CPP11'):
    env['WSPP_ENABLE_CPP11'] = True
