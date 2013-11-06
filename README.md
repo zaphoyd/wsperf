@@ -1,193 +1,149 @@
 # wsperf
 
-**wsperf** is a WebSocket load testing probe.
+**wsperf** is a WebSocket load testing probe that can be used for load testing and performance benchmarking of WebSocket servers:
 
+ * comes as a command line tool that builds on [WebSocket++](http://www.zaphoyd.com/websocketpp), a high-performance C++/ASIO based WebSocket library.
+ * designed to work stand-alone or being controlled from **wstest**, which comes as part of the [Autobahn WebSocket testsuite](http://autobahn.ws/testsuite/).
+
+## Description
+
+The first test mode implemented is **WebSocket Handshaking**.
+
+In this mode, **wsperf** will:
+
+  1. open a TCP connection to a testee
+  2. perform a WebSocket opening handshake
+  3. perform a WebSocket closing handshake
+  4. close the TCP connection
+
+It can do so in parallel and using multiple threads. You can fine control exactly how it operates (see usage section below).
+
+It will create a detailed log file (JSON format) with high-precision timestamps for all states a connection goes through (and also of course if the connection was successful at all).
+
+The generated log file can then be post-processed with **wstest** to obtain statistics like in the following:
+
+	Aggregate results (WebSocket Opening+Closing Handshake)
+	
+	          Duration:      13.4 s
+	             Total:    200000
+	           Success:    200000
+	              Fail:         0
+	            Fail %:      0.00
+	    Handshakes/sec:     14883
+	
+	     Min:       2.0 ms
+	      SD:      10.7 ms
+	     Avg:      67.6 ms
+	  Median:      67.3 ms
+	  q90   :      81.2 ms
+	  q95   :      85.2 ms
+	  q99   :      93.2 ms
+	  q99.9 :     104.9 ms
+	  q99.99:     108.3 ms
+	     Max:     109.2 ms
+	
+	
+	Analyze done.
+ 
+
+ 
 ## Building
 
-You will need to have 2 environment variables set:
+**wsperf** is currently developed and tested on Unix like systems (I use Ubuntu 12.04 LTS x64).
 
-  * `BOOSTROOT` pointing to a Boost installation
+You will need a *decent* C++ compiler, currently at least *GCC 4.6* or *clang X.X*.
+
+The only dependencies of **wsperf** are:
+
+  * [Boost](http://boost.org/)
+  * [WebSocket++](https://github.com/zaphoyd/websocketpp)
+
+### Boost
+
+Don't waste time on your distro's packaged Boost - likely too old. Build from the source, Luke;)
+
+Also see the [Boost Getting Started](http://www.boost.org/doc/libs/1_54_0/more/getting_started/unix-variants.html).
+
+Get Boost from [here](http://sourceforge.net/projects/boost/files/boost/1.55.0.beta.1/).
+
+	cd ~/build
+	tar xvjf ../tarballs/boost_1_55_0b1.tar.bz2
+	cd boost_1_55_0b1
+	./bootstrap.sh --prefix=$HOME/boost_1_55_0b1
+	./b2 -j 4 install
+
+This will take a little time.
+
+
+### WebSocket++
+
+WebSocket++ is a header-only library. So all you need is:
+
+	cd ~/scm
+	git clone git@github.com:zaphoyd/websocketpp.git
+
+### SCons
+
+**wsperf** is built using [SCons](http://scons.org/), a Python based build tool.
+
+So if you have Python installed, all you need is:
+
+	easy_install scons
+
+### wsperf
+
+To build **wsperf**, you will need to have 2 environment variables set:
+
+  * `BOOST_ROOT` pointing to a Boost installation
   * `WSPP_ROOT` pointing to a WebSocket++ source distribution
 
-Note that (for now), you will need the `flow_control2` branch with WebSocket++ checked out.
+Like add the following to your `.bashrc`:
 
-To build:
+	export BOOST_ROOT=${HOME}/boost_1_55_0b1
+	export WSPP_ROOT=${HOME}/scm/websocketpp
 
+Now get the source and build
+
+	cd ~/scm
+	git clone git@github.com:zaphoyd/wsperf.git
+	cd wsperf
 	scons
+
+When successful, this should produce a `wsperf` executable (optimized, statically linked and unstripped).
 
 To cleanup
 
 	scons -uc
 
-
 ## Usage
 
-	time ./wsperf ws://127.0.0.1:9000 4 200000 1000 2000 > results.json
+Basic usage of **wsperf**:
 
+	wsperf <wsuri> <threads> <connections> <low_watermark> <high_watermark> <result_file>
 
-## Analyze
+like e.g.
 
-Analyzing results can be done with `analyze.py` (a quick hack, needs more love). We need a streaming JSON parser, since results are getting big:
+	wsperf ws://127.0.0.1:9000 4 200000 1000 2000 results.json
 
-	git clone git@github.com:oberstet/ijson.git
-	cd ijson
-	~/pypy-2.1/bin/easy_install ijson
+The `wsuri` the the WebSocket address of the testee.
 
+The `threads` parameter controls the number of background worker threads to be spawned.
 
-## Results
+> It can also be `0` in which case the load is processed on the main thread. Note that ASIO will nevertheless create a background thread of asynchronous name resolution. So you see 2 threads for **wsperf** even if run with `threads==0`.
+> 
 
-### WebSocket++
+The `connections` is the total number of WebSocket connections that are opened to the testee - not concurrently, but in total. Also note that **wsperf** will currently not retry a failing connection.
 
-Build and run the testee:
+The `result_file` is the name of the log file to produce.
 
-	$ cd ~/scm/websocketpp
-	$ scons
-	$./build/release/testee_server/testee_server 9002 4
+The `low_watermark` and `high_watermark` control how many parallel connections will be in flight as follows:
 
-Run the test (from another shell):
+**wsperf** will open new TCP connections to the testee and perform WebSocket opening handshakes on those as fast as it can up till the `high_watermark` connections is reached. That is connections which have not yet again been closed.
 
-	$ cd ~/scm/wsperf
-	$ make test_ws
-	pypy wsperf.py --wsuri ws://127.0.0.1:9002 --workers 4 --threads 0 --conns 50000 --lowmark 250 --highmark 500
-	Loading wsperf result file result_0.json ..
-	Loading wsperf result file result_1.json ..
-	Loading wsperf result file result_2.json ..
-	Loading wsperf result file result_3.json ..
+When that happens, it will stop trying to connect more. After some time, more WebSocket connections will get closed again (by performing a closing handshakes), and the outstanding number reaches the `low_watermark`, **wsperf** will start again connecting as fast as it can.
 
-	Aggregate results (WebSocket Opening+Closing Handshake)
+So the watermarks limit the number of WebSocket connections that haven't yet reached the "open" state .. hence are still in flight.
 
-	          Duration:      13.5 s
-	             Total:    200000
-	           Success:    200000
-	              Fail:         0
-	            Fail %:      0.00
-	    Handshakes/sec:     14796
+## Postprocessing
 
-	     Min:       7.6 ms
-	      SD:      11.2 ms
-	     Avg:      68.4 ms
-	  Median:      68.2 ms
-	  q90   :      82.8 ms
-	  q95   :      87.6 ms
-	  q99   :      96.5 ms
-	  q99.9 :     106.4 ms
-	  q99.99:     108.6 ms
-	     Max:     109.2 ms
-
-
-	Analyze done.
-
-
-### Autobahn Multicore
-
-Run the testee:
-
-	$ cd ~/scm/AutobahnPython/examples/websocket/echo_multicore
-	$ pypy server.py --wsuri ws://localhost:9000 --workers 4 --silence
-
-Run the test (from another shell .. make sure to run that test multiple times without restarting the testee to give the PyPy JIT compiler chance to warmup on the hotpaths):
-
-	$ cd ~/scm/wsperf
-	$ make test_ab
-	pypy wsperf.py --wsuri ws://127.0.0.1:9000 --workers 4 --threads 0 --conns 50000 --lowmark 250 --highmark 500
-	Loading wsperf result file result_0.json ..
-	Loading wsperf result file result_1.json ..
-	Loading wsperf result file result_2.json ..
-	Loading wsperf result file result_3.json ..
-
-	Aggregate results (WebSocket Opening+Closing Handshake)
-
-	          Duration:      11.7 s
-	             Total:    200000
-	           Success:    200000
-	              Fail:         0
-	            Fail %:      0.00
-	    Handshakes/sec:     17058
-
-	     Min:       1.0 ms
-	      SD:      16.9 ms
-	     Avg:      31.6 ms
-	  Median:      27.6 ms
-	  q90   :      52.2 ms
-	  q95   :      65.9 ms
-	  q99   :      95.8 ms
-	  q99.9 :     115.2 ms
-	  q99.99:     124.7 ms
-	     Max:     138.0 ms
-
-
-	Analyze done.
-
-
-### Linux Perf
-
-Basic statistics:
-
-	oberstet@corei7-ubuntu:~/scm/wsperf$ sudo perf stat ./wsperf ws://127.0.0.1:9000 8 200000 1000 2000 > results.json
-
-	 Performance counter stats for './wsperf ws://127.0.0.1:9000 8 200000 1000 2000':
-
-	      56397,171142 task-clock                #    3,576 CPUs utilized          
-	           177.411 context-switches          #    0,003 M/sec                  
-	            23.577 cpu-migrations            #    0,418 K/sec                  
-	           595.352 page-faults               #    0,011 M/sec                  
-	   186.462.389.466 cycles                    #    3,306 GHz                     [83,25%]
-	   144.686.178.873 stalled-cycles-frontend   #   77,60% frontend cycles idle    [83,57%]
-	    83.129.352.607 stalled-cycles-backend    #   44,58% backend  cycles idle    [66,67%]
-	    84.877.715.262 instructions              #    0,46  insns per cycle        
-	                                             #    1,70  stalled cycles per insn [83,35%]
-	    16.967.531.711 branches                  #  300,858 M/sec                   [83,40%]
-	       673.808.823 branch-misses             #    3,97% of all branches         [83,11%]
-
-	      15,771390852 seconds time elapsed
-
-	oberstet@corei7-ubuntu:~/scm/wsperf$ 
-
-
-Detailed event recording:
-
-	oberstet@corei7-ubuntu:~/scm/wsperf$ sudo perf record -e cycles,branch-misses,cache-misses ./wsperf ws://127.0.0.1:9000 8 200000 1000 2000 > results.json
-	[ perf record: Woken up 119 times to write data ]
-	[ perf record: Captured and wrote 30.653 MB perf.data (~1339248 samples) ]
-
-Reporting
-
-	oberstet@corei7-ubuntu:~/scm/wsperf$ sudo perf report --stdio
-	# ========
-	# captured on: Mon Nov  4 08:03:59 2013
-	# hostname : corei7-ubuntu
-	# os release : 3.8.0-32-generic
-	# perf version : 3.8.13.10
-	# arch : x86_64
-	# nrcpus online : 8
-	# nrcpus avail : 8
-	# cpudesc : Intel(R) Core(TM) i7 CPU 920 @ 2.67GHz
-	# cpuid : GenuineIntel,6,26,4
-	# total memory : 12296476 kB
-	# cmdline : /usr/bin/perf_3.8.0-32 record -e cycles,branch-misses,cache-misses ./wsperf ws://127.0.0.1:9000 
-	# event : name = cycles, type = 0, config = 0x0, config1 = 0x0, config2 = 0x0, excl_usr = 0, excl_kern = 0, 
-	# event : name = branch-misses, type = 0, config = 0x5, config1 = 0x0, config2 = 0x0, excl_usr = 0, excl_ker
-	# event : name = cache-misses, type = 0, config = 0x3, config1 = 0x0, config2 = 0x0, excl_usr = 0, excl_kern
-	# HEADER_CPU_TOPOLOGY info available, use -I to display
-	# HEADER_NUMA_TOPOLOGY info available, use -I to display
-	# pmu mappings: cpu = 4, software = 1, tracepoint = 2, uncore = 6, breakpoint = 5
-	# ========
-	#
-	# Samples: 249K of event 'cycles'
-	# Event count (approx.): 190156545668
-	#
-	# Overhead  Command        Shared Object                                                                    
-	# ........  .......  ...................  ..................................................................
-	#
-	     4.68%   wsperf  libc-2.15.so         [.] _int_malloc                                                   
-	     3.94%   wsperf  libc-2.15.so         [.] _int_free                                                     
-	     3.20%   wsperf  [kernel.kallsyms]    [k] __ticket_spin_lock                                            
-	     2.91%   wsperf  libc-2.15.so         [.] malloc                                                        
-	     1.86%   wsperf  wsperf               [.] std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_cou
-	     1.84%   wsperf  wsperf               [.] std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_coun
-	     1.61%   wsperf  libpthread-2.15.so   [.] pthread_mutex_lock                                            
-	     1.28%   wsperf  libc-2.15.so         [.] tolower                                                       
-	     1.12%   wsperf  libc-2.15.so         [.] __memcpy_ssse3_back                                           
-	     1.09%   wsperf  libstdc++.so.6.0.16  [.] __cxxabiv1::__vmi_class_type_info::__do_dyncast(long, __cxxabi
-	     1.06%   wsperf  libc-2.15.so         [.] free                                                          
-    ...
+Writeme.
