@@ -21,7 +21,7 @@ struct open_handshake_stats {
     bool s_fail;
 };
 
-void on_socket_init(connection_hdl hdl, boost::asio::ip::tcp::socket & s) {
+void on_socket_init(websocketpp::connection_hdl hdl, boost::asio::ip::tcp::socket & s) {
     boost::asio::ip::tcp::no_delay option(true);
     s.set_option(option);
 }
