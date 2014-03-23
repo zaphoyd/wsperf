@@ -10,7 +10,19 @@
 #include <chrono>
 #include <mutex>
 
+struct message_data {
+    message_data(size_t size, std::chrono::high_resolution_clock::time_point start)
+      : s_size(size)
+      , s_start(start) {}
+    
+    size_t s_size;
+    std::chrono::high_resolution_clock::time_point s_start;
+    std::chrono::high_resolution_clock::time_point s_end;
+};
+
 struct open_handshake_stats {
+    size_t s_id;
+    
     std::chrono::high_resolution_clock::time_point s_start;
     std::chrono::high_resolution_clock::time_point s_tcp_pre_init;
     std::chrono::high_resolution_clock::time_point s_tcp_post_init;
@@ -19,6 +31,12 @@ struct open_handshake_stats {
 
     // some sort of status
     bool s_fail;
+    
+    // list of message data for this connection
+    std::string s_message;
+    std::vector<message_data> s_message_list;
+    size_t s_message_total;
+    size_t s_message_in_flight;
 };
 
 void on_socket_init(websocketpp::connection_hdl hdl, boost::asio::ip::tcp::socket & s) {
@@ -54,6 +72,7 @@ public:
         m_endpoint.set_open_handler(bind(&type::on_open,this,::_1));
         m_endpoint.set_fail_handler(bind(&type::on_fail,this,::_1));
         m_endpoint.set_close_handler(bind(&type::on_close,this,::_1));
+        m_endpoint.set_message_handler(bind(&type::on_message,this,::_1,::_2));
     }
 
     void start(std::string uri, size_t num_threads, size_t num_cons, size_t num_parallel_handshakes_low, size_t num_parallel_handshakes_high, std::string logfile) {
@@ -65,11 +84,16 @@ public:
         m_max_handshakes_high = num_parallel_handshakes_high;
         m_cur_handshakes = 0;
         m_total_connections = 0;
-        m_close_immediately = true;
+        m_close_immediately = false;
         m_cur_connections = 0;
 
         m_low_water_mark_count = 0;
         m_high_water_mark_count = 0;
+
+        m_message_size = 512;
+        m_message_count = 100;
+        m_message_low = 5;
+        m_message_high = 10;
 
         m_test_start = std::chrono::high_resolution_clock::now();
         m_test_start_wallclock = std::chrono::system_clock::now();
@@ -113,6 +137,7 @@ public:
         }
 
         m_endpoint.connect(con);
+        con->s_id = m_total_connections;
 	    con->s_start = std::chrono::high_resolution_clock::now();
     }
 
@@ -138,6 +163,64 @@ public:
         return ctx;
     }
 
+    void send_more_messages(connection_ptr con) {
+        std::cout << "send_more_messages called " << std::endl;
+        std::cout << "(" << con->s_message_total 
+                  << "/" << m_message_count << ") with (" << con->s_message_in_flight 
+                  << "/" << m_message_high << ") in flight on connection " 
+                  << con->s_id << std::endl;
+        while (con->s_message_total < m_message_count && con->s_message_in_flight < m_message_high) {
+            std::copy(
+                &con->s_message_total,
+                &con->s_message_total+sizeof(con->s_message_total),
+                const_cast<char *>(con->s_message.data()));
+            
+            std::cout << "sending message " << con->s_message_total << " on connection " << con->s_id << std::endl;
+            
+            con->s_message_total++;
+            con->s_message_in_flight++;
+            con->s_message_list.push_back(message_data(m_message_size,std::chrono::high_resolution_clock::now()));
+            std::error_code ec;
+            m_endpoint.send(con->get_handle(), con->s_message, websocketpp::frame::opcode::binary,ec);
+            if (ec) {
+                std::cout << "error sending message: " << ec.message() << std::endl;
+                break;
+            }
+        }
+    }
+    
+    void on_message(websocketpp::connection_hdl hdl, typename client_type::message_ptr msg) {
+        connection_ptr con = m_endpoint.get_con_from_hdl(hdl);
+        
+        
+        
+        con->s_message_in_flight--;
+        
+        size_t id;
+        
+        std::copy(
+            msg->get_payload().data(),
+            msg->get_payload().data()+sizeof(id),
+            &id);
+        
+        std::cout << "got message " << id << " on connection " << con->s_id  << " list size: " << con->s_message_list.size() << std::endl;
+                
+        con->s_message_list[id].s_end = std::chrono::high_resolution_clock::now();
+        
+        std::cout << "checking messages in flight: (" << con->s_message_in_flight << "/" << m_message_low << ")" << std::endl;
+        
+        if (con->s_message_in_flight < m_message_low) {
+            std::cout << "mark4" << std::endl;
+            send_more_messages(con);
+        }
+        
+        std::cout << "mark2" << std::endl;
+        if (con->s_message_total == m_message_count && con->s_message_in_flight == 0) {
+            con->close(websocketpp::close::status::going_away,"");
+        }
+        std::cout << "mark3" << std::endl;
+    }
+
     void on_open(websocketpp::connection_hdl hdl) {
         connection_ptr con = m_endpoint.get_con_from_hdl(hdl);
         con->s_open = std::chrono::high_resolution_clock::now();
@@ -145,6 +228,13 @@ public:
 
         if (m_close_immediately) {
             con->close(websocketpp::close::status::going_away,"");
+        } else if (m_message_count > 0) {
+            con->s_message_total = 0;
+            con->s_message_in_flight = 0;
+            con->s_message.assign('*', m_message_size);
+            
+            // start sending messages
+            send_more_messages(con);
         }
 
         std::lock_guard<std::mutex> guard(m_stats_lock);
@@ -231,6 +321,22 @@ public:
                     << "}";
             first = false;
         }
+        logfile << "],\"message_stats\":[";
+        
+        first = true;
+        for (auto i : m_stats_list) {
+            for (auto j : i.s_message_list) {
+                logfile << (!first ? "," : "") << "{\"con\":" 
+                        << i.s_id
+                        << ",\"size\":"
+                        << j.s_size
+                        << ",\"rtt\":"
+                        << std::chrono::duration_cast<dur_type>(j.s_end-j.s_start).count()
+                        << "}";
+            first = false;
+            }
+        }
+        
         logfile << "]}" << std::endl;
 
         logfile.close();
@@ -260,7 +366,16 @@ private:
 
     std::mutex m_stats_lock;
     std::vector<open_handshake_stats> m_stats_list;
+    
+    size_t m_message_size;
+    size_t m_message_count;
+    size_t m_message_low;
+    size_t m_message_high;
 };
+
+
+
+
 
 typedef websocketpp::client<wsperf_config<websocketpp::config::asio_client, open_handshake_stats>> client_tls;
 
