@@ -3,12 +3,15 @@
  * at any given time.
  */
 
+#define _WEBSOCKETPP_CPP11_STL_
+
 #include "wspp-config.hpp"
 
 #include <iostream>
 #include <fstream>
 #include <chrono>
 #include <mutex>
+#include <thread>
 
 struct message_data {
     message_data(size_t size, std::chrono::high_resolution_clock::time_point start)
@@ -90,10 +93,10 @@ public:
         m_low_water_mark_count = 0;
         m_high_water_mark_count = 0;
 
-        m_message_size = 512;
-        m_message_count = 100;
-        m_message_low = 5;
-        m_message_high = 10;
+        m_message_size = 8;
+        m_message_count = 40000;
+        m_message_low = 20;
+        m_message_high = 40;
 
         m_test_start = std::chrono::high_resolution_clock::now();
         m_test_start_wallclock = std::chrono::system_clock::now();
@@ -164,18 +167,16 @@ public:
     }
 
     void send_more_messages(connection_ptr con) {
-        std::cout << "send_more_messages called " << std::endl;
+        /*std::cout << "send_more_messages called " << std::endl;
         std::cout << "(" << con->s_message_total 
                   << "/" << m_message_count << ") with (" << con->s_message_in_flight 
                   << "/" << m_message_high << ") in flight on connection " 
-                  << con->s_id << std::endl;
+                  << con->s_id << std::endl;*/
         while (con->s_message_total < m_message_count && con->s_message_in_flight < m_message_high) {
             std::copy(
-                &con->s_message_total,
-                &con->s_message_total+sizeof(con->s_message_total),
+                reinterpret_cast<char *>(&con->s_message_total),
+                reinterpret_cast<char *>(&con->s_message_total)+sizeof(con->s_message_total),
                 const_cast<char *>(con->s_message.data()));
-            
-            std::cout << "sending message " << con->s_message_total << " on connection " << con->s_id << std::endl;
             
             con->s_message_total++;
             con->s_message_in_flight++;
@@ -192,33 +193,38 @@ public:
     void on_message(websocketpp::connection_hdl hdl, typename client_type::message_ptr msg) {
         connection_ptr con = m_endpoint.get_con_from_hdl(hdl);
         
-        
+        //std::cout << websocketpp::utility::to_hex(msg->get_payload()) << std::endl;
         
         con->s_message_in_flight--;
         
-        size_t id;
+        size_t id = 0;
         
-        std::copy(
+        /*std::copy(
             msg->get_payload().data(),
             msg->get_payload().data()+sizeof(id),
-            &id);
-        
-        std::cout << "got message " << id << " on connection " << con->s_id  << " list size: " << con->s_message_list.size() << std::endl;
+            &id);*/
+        id = *reinterpret_cast<size_t*>(const_cast<char *>(msg->get_payload().data()));
+
+        /*std::cout << msg->get_payload().data() << std::endl;
+        std::cout << msg->get_payload().data()+sizeof(id) << std::endl;
+        std::cout << &id << std::endl;
+        std::cout << &con << std::endl;
+        std::cout << sizeof(id) << std::endl;
+        std::cout << "got message " << id;
+        std::cout << " on connection " << con->s_id;
+        std::cout << " list size: " << con->s_message_list.size() << std::endl;*/
                 
         con->s_message_list[id].s_end = std::chrono::high_resolution_clock::now();
         
-        std::cout << "checking messages in flight: (" << con->s_message_in_flight << "/" << m_message_low << ")" << std::endl;
+        //std::cout << "checking messages in flight: (" << con->s_message_in_flight << "/" << m_message_low << ")" << std::endl;
         
         if (con->s_message_in_flight < m_message_low) {
-            std::cout << "mark4" << std::endl;
             send_more_messages(con);
         }
         
-        std::cout << "mark2" << std::endl;
         if (con->s_message_total == m_message_count && con->s_message_in_flight == 0) {
             con->close(websocketpp::close::status::going_away,"");
         }
-        std::cout << "mark3" << std::endl;
     }
 
     void on_open(websocketpp::connection_hdl hdl) {
@@ -231,8 +237,9 @@ public:
         } else if (m_message_count > 0) {
             con->s_message_total = 0;
             con->s_message_in_flight = 0;
-            con->s_message.assign('*', m_message_size);
-            
+            con->s_message.clear();
+            con->s_message.append(m_message_size, '*');
+
             // start sending messages
             send_more_messages(con);
         }
